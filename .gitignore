@@ -1,0 +1,8 @@
+# 生成文件
+/backup/
+/output/
+/voice/
+# build文件
+/build/
+/dist/
+/main.spec
