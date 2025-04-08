@@ -28,9 +28,6 @@ hash_algorithm = "sha256"
 
 # global variable
 obj_hash_name = ""
-# default_index = pd.DataFrame()
-# this_index = pd.DataFrame()
-# info_json = pd.DataFrame()
 default_index = []
 this_index = []
 work_index = []
@@ -77,13 +74,6 @@ def traverse_and_hash(root_dir=voice_path):
 
 # file operate
 # scan csv
-# def get_index():   # pandas ver
-#     try:
-#         index_csv = pd.read_csv(default_path + "/index.csv", encoding="utf-8")
-#         return index_csv
-#     except Exception as e:
-#         print(f"Error processing index.csv: {str(e)}")
-#         return None
 def get_default_index():
     global default_index
     try:
@@ -109,11 +99,6 @@ def get_this_index():
         return False
 
 
-
-# def init_dir(index):   # pandas ver
-#     shutil.rmtree(voice_path, ignore_errors=True)
-#     for i in range(0, index.shape[0] - 1):
-#         os.makedirs(voice_path + "/{:0>2d}".format(i) + index.iat[i, 1])
 def init_dirs():
     global default_index
     if not get_default_index():
@@ -192,11 +177,11 @@ def update_info_json(args):
 
 # produce
 def from_dirs_produce(move = False):
-    error_set = []
-    noval_key = []  # no Value Key
     global default_index , work_index
     work_index.clear()
-    work_index = default_index
+    error_set = []
+    noval_key = []
+    work_index= [[0]]* len(default_index)   # no Value Key
     this_output_path = os.path.join(output_path, obj_hash_name, r"sound\vo", obj_hash_name)
     if not os.path.exists(this_output_path):
         os.makedirs(this_output_path)
@@ -212,23 +197,24 @@ def from_dirs_produce(move = False):
                         count += 1
                         if move:
                             new_name = f"{default_index[folder_index][0]}_{count}.wav"
+                            work_index[folder_index].append(new_name)
                             target_path = os.path.join(this_output_path, new_name)
                             shutil.copy2(file.path, target_path)
                     elif not move:
                         error_set.append(f"{file.path}不是.wav音频文件")
-                if count != 0:
-                    work_index[folder_index][0] = str(count)
+                work_index[folder_index][0] = count
             elif not move:
                 error_set.append(f"{entry.path}是预期之外的文件")
         noval_key.clear()
-        for i in range(len(default_index)):
-            if not work_index[i][0].isdigit():
+        for i in range(len(work_index)):
+            if work_index[i][0] == 0:
                 noval_key.append(default_index[i][1])
+        # print(work_index)
         return True, error_set, noval_key
 
     except Exception as e:
         print(f"Error producing mod from dirs: {str(e)}")
-        return False
+        return False, error_set, noval_key
 
 
 def from_csv_produce():
@@ -690,7 +676,7 @@ class Window(ttk.Frame):
 
         product_button_frame = ttk.Frame(table_page[2],padding=40)
         product_button_frame.pack(side=BOTTOM, fill=X)
-        product_button = ttk.Button(product_button_frame,text="生成顾问模组",
+        product_button = ttk.Button(product_button_frame,text="生成顾问模组",takefocus=False,
                                     command=lambda : touch_product())
         product_button.pack(side=BOTTOM, fill=X)
 
@@ -775,7 +761,8 @@ class Window(ttk.Frame):
 
 
 if __name__ == "__main__":
-
+    get_default_index()
+    print(default_index)
 
     root = ttk.Window(
         title=f"{cn_title} {en_title} {version}",
