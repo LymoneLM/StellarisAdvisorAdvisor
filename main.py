@@ -1,4 +1,5 @@
 import os
+import io
 import re
 import csv
 import json
@@ -16,7 +17,7 @@ from ttkbootstrap.scrolled import ScrolledFrame
 # meta
 cn_title = "群星顾问模组小助手"
 en_title = "Stellaris Advisor Advisor"
-version = "v0.1.0"
+version = "v0.1.0-BETA"
 _copyright = "LymoneLM"
 
 # constant
@@ -115,10 +116,6 @@ def init_csv():
     try:
         if not os.path.exists(voice_path):
             os.makedirs(voice_path)
-    except Exception as e:
-        print(f"Error create {voice_path}: {str(e)}")
-        return False
-    try:
         shutil.copyfile(os.path.join(default_path, "index.csv"), "index.csv")
         return True
     except Exception as e:
@@ -145,8 +142,8 @@ def init_info_json(args):
     internal["need_descriptor_mod"] = args[1]
     info["internal"] = internal
     try:
-        f = open('info.json', 'w', encoding="utf-8")
-        f.write(json.dumps(info))
+        with open('info.json', 'w', encoding="utf-8") as f:
+            f.write(json.dumps(info))
         return True
     except Exception as e:
         print(f"Error init info.json: {str(e)}")
@@ -156,7 +153,8 @@ def init_info_json(args):
 def load_info_json():
     global info
     try:
-        info = json.load(open("info.json", 'r', encoding="utf-8"))
+        with open('info.json', 'r', encoding="utf-8") as f:
+            info = json.load(f)
         return True
     except Exception as e:
         print(f"Error loading info.json: {str(e)}")
@@ -169,9 +167,9 @@ def update_info_json(args):
     info["meta"] ["en_name"] = args[2]
     info["meta"] ["icon_path"] = args[3]
     try:
-        f = open('info.json', 'w', encoding="utf-8")
-        x =  json.dumps(info)
-        f.write(x)
+        with open('info.json', 'w', encoding="utf-8") as f:
+            x = json.dumps(info)
+            f.write(x)
         return True
     except Exception as e:
         print(f"Error update info.json: {str(e)}")
@@ -224,34 +222,172 @@ def produce_from_csv(move = False):
     error_set = []
     noval_key = []
     if not move:
-        text = ""
         if not get_default_index():
             return False
-        for row in range(len(default_index)):
-            if this_index[row][0] != default_index[row][0]:
-                text += f" {row+1}"
-        if len(error_set) > 0:
-            error_set.append(f"索引文件{text} 行与默认索引存在差异，将按照索引文件处理")
-    work_index = [0 for _ in range(len(default_index))]
+        if len(this_index) != len(default_index):
+            error_set.append(f"索引文件行数与默认索引存在差异，将按照索引文件处理")
+        else:
+            text = ""
+            for i in range(len(this_index)):
+                if this_index[i][0] != default_index[i][0]:
+                    text += f" {i+1}"
+            if len(error_set) > 0:
+                error_set.append(f"索引文件{text} 行Key值与默认索引存在差异，将按照索引文件处理")
+        if len(error_set) > 0:  # this index not as same as default one at all
+            pattern = r'^[A-Za-z0-9_]+$'
+            for i in range(len(this_index)):
+                if not re.match(pattern, str(this_index[i][0])):
+                    error_set[0] = "fatal"
+                    return False, error_set, noval_key
+    work_index = [0 for _ in range(len(this_index))]
     this_output_path = os.path.join(output_path, obj_hash_name, r"sound\vo", obj_hash_name)
     if move and not os.path.exists(this_output_path):
         os.makedirs(this_output_path)
     try:
-        for row in range(len(default_index)):
-            if len(this_index[row]) > 2:
-                for col in range(2,len(this_index[row])):
-                    if not os.path.exists(os.path.join(voice_path, this_index[row][col])):
+        for i in range(len(this_index)):
+            if len(this_index[i]) > 2:
+                count = 0
+                if not move:
+                    default_index[i][0] = this_index[i][0]
+                for col in range(2,len(this_index[i])):
+                    file_path = os.path.join(voice_path, this_index[i][col])
+                    if not file_path.lower().endswith('.wav'):
+                        file_path += '.wav'
+                    if not os.path.exists(file_path):
                         if not move:
-                            error_set.append(f"找不到位于索引{row+1}{chr(ord('A')+2)}处名为{this_index[row][col]}的音频文件")
+                            error_set.append(f"找不到位于索引{i+1}{chr(ord('A')+col)}处名为{this_index[i][col]}的音频文件")
+                    else:
+                        count += 1
+                        if move:
+                            new_name = f"{this_index[i][0]}_{count}.wav"
+                            target_path = os.path.join(this_output_path, new_name)
+                            shutil.copy2(file_path, target_path)
+                work_index[i] = count
+        for i in range(len(this_index)):
+            if work_index[i] == 0:
+                noval_key.append(this_index[i][1])
         return True, error_set, noval_key
     except Exception as e:
         print(f"Error producing mod from csv: {str(e)}")
         return False, error_set, noval_key
 
 
-def write_asset_from_work_index():
-    print()
-    # TODO:
+# noinspection SpellCheckingInspection
+def write_asset_from_work_index(volume = 1):
+    global default_index , work_index , this_index , info
+    path = os.path.join(output_path, obj_hash_name, "sound")
+    if not os.path.exists(path):
+        os.makedirs(path)
+    if not info["internal"]["is_use_dirs"]:
+        if not get_this_index():
+            return False
+        default_index.clear()
+        this_index = default_index
+    else:
+        if not get_this_index():
+            return False
+    try:
+        with open(os.path.join(path, f"{obj_hash_name}.asset"), "w") as f:
+            f.write(f"### Reduced by {en_title}\n")
+
+            f.write("### Reg effect\n")
+            f.write("category = {\n"
+                    "\tname = \"Voice\"\n"
+                    "\tsoundeffects = {\n")
+            for i in range(len(default_index)):
+                if work_index[i] == 0:
+                    continue
+                f.write(f"\t\t{obj_hash_name}_{default_index[i][0]}\n")
+            f.write("\t}\n"
+                    "}\n")
+
+            f.write("\n\n### Reg sound file\n")
+            for i in range(len(default_index)):
+                if work_index[i] == 0:
+                    continue
+                for t in range(work_index[i]):
+                    f.write("sound =\n{\n")
+                    f.write(f"\tname = \"{obj_hash_name}_{default_index[i][0]}_{t+1}\"\n")
+                    f.write(f"\tfile = \"vo/{obj_hash_name}/{default_index[i][0]}_{t+1}.wav\"\n")
+                    f.write("}\n")
+                f.write("\n")
+
+            f.write("\n### bind sound to effect\n")
+            for i in range(len(default_index)):
+                if work_index[i] == 0:
+                    continue
+                f.write("soundeffect = {\n")
+                f.write(f"\tname = {obj_hash_name}_{default_index[i][0]}\n")
+                f.write("\tsounds = {\n")
+                for t in range(work_index[i]):
+                    f.write("\t\tweighted_sound = { sound = "
+                            +f"{obj_hash_name}_{default_index[i][0]}_{t+1} "
+                            +"weight = 1000 }\n")
+                f.write("\t}\n"
+                        +f"\tvolume = {volume}\n"
+                        +"\tmax_audible = 1\n"
+                        +"\tmax_audible_behavior = fail\n"
+                        +"}\n\n")
+
+            f.write("\n### sound group\n")
+            f.write("soundgroup =\n{\n")
+            f.write(f"\tname = {obj_hash_name}\n\tsoundeffectoverrides =\n"+"\t{")
+            for i in range(len(default_index)):
+                if work_index[i] == 0:
+                    continue
+                f.write(f"\t\t{default_index[i][0]} = {obj_hash_name}_{default_index[i][0]}\n")
+            f.write("\t}\n}\n")
+        return True
+    except Exception as e:
+        print(f"Error writing asset: {str(e)}")
+        return False
+
+
+def write_i18n_yml():
+    global info
+    en_name = info["meta"]["en_name"]
+    cn_name = info["meta"]["cn_name"]
+    i18n_path = os.path.join(output_path, obj_hash_name, "localisation")
+    if not os.path.exists(i18n_path):
+        os.makedirs(i18n_path)
+    shutil.rmtree(i18n_path, ignore_errors=True)
+    try:
+        os.makedirs(os.path.join(i18n_path, "english"))
+        with io.open(os.path.join(i18n_path, "english", f"{obj_hash_name}_l_english.yml"), "w", encoding="utf-8-sig") as f:
+            f.write(f"l_english:\n {obj_hash_name}: \"{en_name}\"")
+        os.makedirs(os.path.join(i18n_path, "simp_chinese"))
+        with io.open(os.path.join(i18n_path, "simp_chinese", f"{obj_hash_name}_l_simp_chinese.yml"), "w", encoding="utf-8-sig") as f:
+            f.write(f"l_simp_chinese:\n {obj_hash_name}: \"{cn_name}\"")
+        return True
+    except Exception as e:
+        print(f"Error writing i18n yml: {str(e)}")
+        return False
+
+
+def write_others():
+    global info
+    icon_path = os.path.join(output_path, obj_hash_name, r"gfx\interface\icons")
+    txt_path = os.path.join(output_path, obj_hash_name, r"sound\advisor_voice_types")
+    if not os.path.exists(icon_path):
+        os.makedirs(icon_path)
+    if not os.path.exists(txt_path):
+        os.makedirs(txt_path)
+    try:
+        shutil.copy2(info["meta"]["icon"], os.path.join(icon_path, f"{obj_hash_name}.dds"))
+        with open(os.path.join(txt_path, f"advisor_voice_types_{obj_hash_name}.txt"), "w") as f:
+            f.write(f"{obj_hash_name} = "+"{\n"
+                    +f"\tname = \"{obj_hash_name}\"\n"
+                    +f"\ticon = \""+r"gfx/interface/icons/"+f"{obj_hash_name}.dds\"\n"
+                    +"\tplayable = {\n"
+                    +"\t\talways = yes\n"
+                    +"\t}\n"
+                    +"\tweight = {\n"
+                    +"\t\tbase = 0\n"
+                    +"\t}\n}\n")
+        return True
+    except Exception as e:
+        print(f"Error writing other file: {str(e)}")
+        return False
 
 
 # ui
@@ -298,13 +434,23 @@ class Window(ttk.Frame):
 
         menubar = ttk.Menu(root)
         feedback = ttk.Menu(menubar, tearoff=False)
-        feedback.add_command(label="Steam社区", )
+        # feedback.add_command(label="Steam社区", )
         # noinspection SpellCheckingInspection
         url_qq_group = ("http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=JjKgF6Qshvuuuze9JiaCm6xPVCKaHNLT&"
                         "authKey=pe64fotfEHDgrDbBPk9M9sG5oAaMqp4n%2F%2FCLBvOf7yJOn8r5i3MGZGdLHdYdlnuG&"
                         "noverify=0&group_code=658109215")
         feedback.add_command(label="QQ社群", command=lambda: webbrowser.open(url_qq_group))
         menubar.add_cascade(label="反馈", menu=feedback)
+
+        tools = ttk.Menu(menubar, tearoff=False)
+        url_blplab = "https://www.hiveworkshop.com/threads/blp-lab-v0-5-0.137599/"
+        tools.add_command(label=".dds图片转换", command=lambda: webbrowser.open(url_blplab))
+        url_ffmpeg = "https://ffmpeg.org/"
+        tools.add_command(label=".wav音频转换", command=lambda: webbrowser.open(url_ffmpeg))
+        url_gpt_sovtis = "https://github.com/RVC-Boss/GPT-SoVITS"
+        tools.add_command(label="GPT-SoVITS", command=lambda: webbrowser.open(url_gpt_sovtis))
+        menubar.add_cascade(label="工具", menu=tools)
+
         help_menu = ttk.Menu(menubar, tearoff=False)
         url_github = "https://github.com/LymoneLM/StellarisAdvisorAdvisor"
         help_menu.add_command(label="GitHub", command=lambda: webbrowser.open(url_github))
@@ -559,7 +705,6 @@ class Window(ttk.Frame):
         ttk.Entry(info_table_frame, textvariable=var_icon_path).pack(side=TOP, fill=X)
 
 
-
         def touch_produce():
             # basic confirm
             def check_meta() -> bool:
@@ -704,6 +849,14 @@ class Window(ttk.Frame):
             else:
                 append_log("本次将根据index.csv索引生成模组")
                 x, error_set, noval_key = produce_from_csv()
+                if not x and error_set[0] == "fatal":
+                    append_log("索引文件存在错误，请检查索引文件",log_lvl=LogLvl.ERROR)
+                    Messagebox.show_info(
+                        parent=root,
+                        title="索引文件错误",
+                        message="索引文件存在错误，请检查索引文件"
+                    )
+                    return
             if not x:
                 append_log("索引出错，请重试",log_lvl=LogLvl.ERROR)
             if len(error_set) != 0 and not handle_error_set(error_set):
@@ -716,7 +869,29 @@ class Window(ttk.Frame):
             append_log("文件转移完成")
 
             # write asset
+            if not write_asset_from_work_index():
+                append_log("生成效果注册文件时出错，请重试",log_lvl=LogLvl.ERROR)
+                return
+            append_log("生成效果注册文件")
+            if not write_i18n_yml():
+                append_log("生成i18n文件时出错，请重试",log_lvl=LogLvl.ERROR)
+                return
+            append_log("生成i18n文件")
+            if not write_others():
+                append_log("生成其他配置文件时出错，请重试",log_lvl=LogLvl.ERROR)
+                return
+            append_log("生成其他配置文件")
 
+            # produce done
+            append_log(f"模组生成完成，位于{output_path}\\{obj_hash_name}",log_lvl=LogLvl.SUCCESS)
+            Messagebox.show_info(
+                parent=root,
+                title="成功",
+                message=f"模组生成完成，位于{output_path}\\{obj_hash_name}"
+                        +f"感谢您使用{cn_title}，请在充分测试后发布模组，如有疑问烦请移步反馈"
+            )
+            append_log(f"感谢您使用{cn_title}，请在充分测试后发布模组，如有疑问烦请移步反馈")
+            progress_step(done=True)
 
 
 
@@ -736,7 +911,7 @@ class Window(ttk.Frame):
             INFO = 1,
             WARN = 2,
             ERROR = 3,
-            FATAL = 4,  # in fact, no use at all
+            SUCCESS = 4,
 
         log_frame = ttk.Frame(self, bootstyle=SECONDARY)
         log_frame.grid(row=1, column=2, sticky=NSEW)
@@ -745,7 +920,6 @@ class Window(ttk.Frame):
         ttk.Label(log_frame, width=400, font=("Microsoft YaHei", 1), bootstyle=SECONDARY).pack(side=TOP, fill=X)
 
         # progressbar
-        var_progress = ttk.IntVar(self,name="var_progress")
         pb_frame = ttk.Frame(log_frame, padding=(0, 0, 5, 5))
         pb_frame.pack(side=TOP, fill=X)
         pb = ttk.Progressbar(
@@ -757,7 +931,6 @@ class Window(ttk.Frame):
         ttk.Label(pb_frame, text='%', bootstyle=SECONDARY).pack(side=RIGHT)
         # noinspection PyTypeChecker
         ttk.Label(pb_frame, textvariable="var_progress").pack(side=RIGHT)
-        var_progress.set(100)
         self.setvar("var_progress","100")
 
         progress_this = ttk.IntVar(value=0)
@@ -778,7 +951,6 @@ class Window(ttk.Frame):
                 self.setvar("var_progress", f"{(progress_this.get()//progress_length.get())*100}")
 
 
-
         log_count = ttk.IntVar(value=0)
         def append_log(log:str, log_lvl:LogLvl=LogLvl.INFO, step=False):
             if log_count.get() >= 20:
@@ -793,6 +965,9 @@ class Window(ttk.Frame):
                     case LogLvl.ERROR:
                         log_label[log_count.get()].configure(bootstyle=(DANGER, INVERSE))
                         pb.config(bootstyle=(DANGER, STRIPED))
+                    case LogLvl.SUCCESS:
+                        log_label[log_count.get()].configure(bootstyle=(SUCCESS, STRIPED))
+                        pb.config(bootstyle=(SUCCESS, STRIPED))
             log_count.set(log_count.get() + 1)
             if step:
                 progress_step()
@@ -813,9 +988,6 @@ class Window(ttk.Frame):
 
 
 if __name__ == "__main__":
-    # get_default_index()
-    # print(default_index)
-
     root = ttk.Window(
         title=f"{cn_title} {en_title} {version}",
         themename="yeti",
