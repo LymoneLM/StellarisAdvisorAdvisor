@@ -2,6 +2,7 @@ import os
 import io
 import re
 import csv
+import sys
 import json
 import enum
 import shutil
@@ -17,13 +18,17 @@ from ttkbootstrap.scrolled import ScrolledFrame
 # meta
 cn_title = "群星顾问模组小助手"
 en_title = "Stellaris Advisor Advisor"
-version = "v0.1.0-BETA"
+version = "v0.1.0-beta"
 _copyright = "LymoneLM"
 
 # constant
 voice_path = r".\voice"
 default_path = r".\.default"
-img_path = r".\img"
+if hasattr(sys, '_MEIPASS'):
+    # noinspection PyProtectedMember
+    img_path = sys._MEIPASS + "\img"
+else:
+    img_path = r".\img"
 backup_path = r".\backup"
 output_path = r".\output"
 hash_algorithm = "sha256"
@@ -99,7 +104,7 @@ def get_this_index():
             this_index.append(row)
         return True
     except Exception as e:
-        print(f"Error processing index.csv: {str(e)}")
+        print(f"Error processing this index.csv: {str(e)}")
         return False
 
 
@@ -284,7 +289,7 @@ def write_asset_from_work_index(volume = 1):
         default_index.clear()
         this_index = default_index
     else:
-        if not get_this_index():
+        if not get_default_index():
             return False
     try:
         with open(os.path.join(path, f"{obj_hash_name}.asset"), "w") as f:
@@ -306,7 +311,7 @@ def write_asset_from_work_index(volume = 1):
                 if work_index[i] == 0:
                     continue
                 for t in range(work_index[i]):
-                    f.write("sound =\n{\n")
+                    f.write("sound = {\n")
                     f.write(f"\tname = \"{obj_hash_name}_{default_index[i][0]}_{t+1}\"\n")
                     f.write(f"\tfile = \"vo/{obj_hash_name}/{default_index[i][0]}_{t+1}.wav\"\n")
                     f.write("}\n")
@@ -330,8 +335,8 @@ def write_asset_from_work_index(volume = 1):
                         +"}\n\n")
 
             f.write("\n### sound group\n")
-            f.write("soundgroup =\n{\n")
-            f.write(f"\tname = {obj_hash_name}\n\tsoundeffectoverrides =\n"+"\t{")
+            f.write("soundgroup = {\n")
+            f.write(f"\tname = {obj_hash_name}\n\tsoundeffectoverrides ="+" {\n")
             for i in range(len(default_index)):
                 if work_index[i] == 0:
                     continue
@@ -373,7 +378,7 @@ def write_others():
     if not os.path.exists(txt_path):
         os.makedirs(txt_path)
     try:
-        shutil.copy2(info["meta"]["icon"], os.path.join(icon_path, f"{obj_hash_name}.dds"))
+        shutil.copy2(info["meta"]["icon_path"], os.path.join(icon_path, f"{obj_hash_name}.dds"))
         with open(os.path.join(txt_path, f"advisor_voice_types_{obj_hash_name}.txt"), "w") as f:
             f.write(f"{obj_hash_name} = "+"{\n"
                     +f"\tname = \"{obj_hash_name}\"\n"
@@ -621,7 +626,7 @@ class Window(ttk.Frame):
         lf_other_option.pack(side=TOP, fill=X, padx=20, pady=10)
 
         var_need_descriptor_mod = ttk.BooleanVar(value=False)
-        ttk.Checkbutton(lf_other_option,text="生成descriptor.mod描述文件",state=NORMAL,variable=var_need_descriptor_mod,
+        ttk.Checkbutton(lf_other_option,text="生成descriptor.mod描述文件(beta版未实装功能)",state=NORMAL,variable=var_need_descriptor_mod,
                         bootstyle="round-toggle").pack(side=TOP, pady=2, fill=X)
 
         def touch_init(flag):
@@ -773,6 +778,7 @@ class Window(ttk.Frame):
             global obj_hash_name
             obj_hash_name = f"{var_object_name.get()}_" + traverse_and_hash()[:8]
 
+            progress_step(start=True,length=8)
             append_log(f"开始生成模组{obj_hash_name}")
             if not update_info_json([
                 var_object_name.get(),
@@ -781,7 +787,7 @@ class Window(ttk.Frame):
                 var_icon_path.get(),
             ]):
                 append_log("info.json更新失败",log_lvl=LogLvl.ERROR)
-            append_log("更新info.json")
+            append_log("更新info.json",step=True)
 
             this_output_path = os.path.join(output_path, obj_hash_name)
             if not os.path.exists(output_path):
@@ -841,7 +847,7 @@ class Window(ttk.Frame):
                     return False
                 return True
 
-            append_log("开始索引文件")
+            append_log("开始索引文件",step=True)
             is_use_dirs = info["internal"]["is_use_dirs"]
             if is_use_dirs:
                 append_log("本次将根据文件夹索引生成模组")
@@ -859,6 +865,7 @@ class Window(ttk.Frame):
                     return
             if not x:
                 append_log("索引出错，请重试",log_lvl=LogLvl.ERROR)
+            progress_step()
             if len(error_set) != 0 and not handle_error_set(error_set):
                 return
             if len(noval_key) != 0 and not handle_noval_key(noval_key):
@@ -866,28 +873,28 @@ class Window(ttk.Frame):
             x = produce_from_dirs(move=True) if is_use_dirs else produce_from_csv(move=True)
             if not x:
                 append_log("文件转移出错，请重试", log_lvl=LogLvl.ERROR)
-            append_log("文件转移完成")
+            append_log("文件转移完成",step=True)
 
             # write asset
             if not write_asset_from_work_index():
                 append_log("生成效果注册文件时出错，请重试",log_lvl=LogLvl.ERROR)
                 return
-            append_log("生成效果注册文件")
+            append_log("生成效果注册文件",step=True)
             if not write_i18n_yml():
                 append_log("生成i18n文件时出错，请重试",log_lvl=LogLvl.ERROR)
                 return
-            append_log("生成i18n文件")
+            append_log("生成i18n文件",step=True)
             if not write_others():
                 append_log("生成其他配置文件时出错，请重试",log_lvl=LogLvl.ERROR)
                 return
-            append_log("生成其他配置文件")
+            append_log("生成其他配置文件",step=True)
 
             # produce done
             append_log(f"模组生成完成，位于{output_path}\\{obj_hash_name}",log_lvl=LogLvl.SUCCESS)
             Messagebox.show_info(
                 parent=root,
                 title="成功",
-                message=f"模组生成完成，位于{output_path}\\{obj_hash_name}"
+                message=f"模组生成完成，位于{output_path}\\{obj_hash_name}\n"
                         +f"感谢您使用{cn_title}，请在充分测试后发布模组，如有疑问烦请移步反馈"
             )
             append_log(f"感谢您使用{cn_title}，请在充分测试后发布模组，如有疑问烦请移步反馈")
@@ -939,6 +946,7 @@ class Window(ttk.Frame):
             if start:
                 pb.configure(bootstyle=(SUCCESS, STRIPED))
                 self.setvar("var_progress", "0")
+                progress_this.set(0)
                 if "length" in args:
                     progress_length.set(args.get("length"))
                 else:
@@ -948,7 +956,7 @@ class Window(ttk.Frame):
                 self.setvar("var_progress", "100")
             else:
                 progress_this.set(progress_this.get()+1)
-                self.setvar("var_progress", f"{(progress_this.get()//progress_length.get())*100}")
+                self.setvar("var_progress", f"{int((progress_this.get()/progress_length.get())*100)}")
 
 
         log_count = ttk.IntVar(value=0)
@@ -966,7 +974,7 @@ class Window(ttk.Frame):
                         log_label[log_count.get()].configure(bootstyle=(DANGER, INVERSE))
                         pb.config(bootstyle=(DANGER, STRIPED))
                     case LogLvl.SUCCESS:
-                        log_label[log_count.get()].configure(bootstyle=(SUCCESS, STRIPED))
+                        log_label[log_count.get()].configure(bootstyle=(SUCCESS, INVERSE))
                         pb.config(bootstyle=(SUCCESS, STRIPED))
             log_count.set(log_count.get() + 1)
             if step:
