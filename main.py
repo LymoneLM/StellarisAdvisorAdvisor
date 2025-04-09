@@ -5,6 +5,7 @@ import json
 import enum
 import shutil
 import hashlib
+import webbrowser
 
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
@@ -15,7 +16,7 @@ from ttkbootstrap.scrolled import ScrolledFrame
 # meta
 cn_title = "群星顾问模组小助手"
 en_title = "Stellaris Advisor Advisor"
-version = "v1.0.0"
+version = "v0.1.0"
 _copyright = "LymoneLM"
 
 # constant
@@ -223,13 +224,14 @@ def produce_from_csv(move = False):
     error_set = []
     noval_key = []
     if not move:
+        text = ""
         if not get_default_index():
             return False
         for row in range(len(default_index)):
             if this_index[row][0] != default_index[row][0]:
-                error_set.append(f"索引文件{row}行与默认索引存在差异")
+                text += f" {row+1}"
         if len(error_set) > 0:
-            error_set.append("索引文件与默认索引存在差异，将按照索引文件处理")
+            error_set.append(f"索引文件{text} 行与默认索引存在差异，将按照索引文件处理")
     work_index = [0 for _ in range(len(default_index))]
     this_output_path = os.path.join(output_path, obj_hash_name, r"sound\vo", obj_hash_name)
     if move and not os.path.exists(this_output_path):
@@ -240,7 +242,7 @@ def produce_from_csv(move = False):
                 for col in range(2,len(this_index[row])):
                     if not os.path.exists(os.path.join(voice_path, this_index[row][col])):
                         if not move:
-                            error_set.append(f"找不到位于索引{row+1}{chr(ord('A')+2)}处名为{row[col]}的音频文件")
+                            error_set.append(f"找不到位于索引{row+1}{chr(ord('A')+2)}处名为{this_index[row][col]}的音频文件")
         return True, error_set, noval_key
     except Exception as e:
         print(f"Error producing mod from csv: {str(e)}")
@@ -297,9 +299,15 @@ class Window(ttk.Frame):
         menubar = ttk.Menu(root)
         feedback = ttk.Menu(menubar, tearoff=False)
         feedback.add_command(label="Steam社区", )
-        feedback.add_command(label="QQ社群", )
+        # noinspection SpellCheckingInspection
+        url_qq_group = ("http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=JjKgF6Qshvuuuze9JiaCm6xPVCKaHNLT&"
+                        "authKey=pe64fotfEHDgrDbBPk9M9sG5oAaMqp4n%2F%2FCLBvOf7yJOn8r5i3MGZGdLHdYdlnuG&"
+                        "noverify=0&group_code=658109215")
+        feedback.add_command(label="QQ社群", command=lambda: webbrowser.open(url_qq_group))
         menubar.add_cascade(label="反馈", menu=feedback)
         help_menu = ttk.Menu(menubar, tearoff=False)
+        url_github = "https://github.com/LymoneLM/StellarisAdvisorAdvisor"
+        help_menu.add_command(label="GitHub", command=lambda: webbrowser.open(url_github))
         help_menu.add_command(label="关于", command=about)
         menubar.add_cascade(label="帮助", menu=help_menu)
         menubar.add_command(label="退出", command=root.quit)
@@ -642,8 +650,8 @@ class Window(ttk.Frame):
                 count = len(error_set)
                 append_log(f"索引存在{count}个错误", log_lvl=LogLvl.ERROR)
                 text = ""
-                for i in range(min(count, 20)):
-                    text += text + error_set[i] + "\n"
+                for t in range(min(count, 20)):
+                    text += text + error_set[t] + "\n"
                 if count > 20:
                     text += "……"
                 f = Messagebox.okcancel(
@@ -672,8 +680,8 @@ class Window(ttk.Frame):
                     return False
                 append_log(f"存在{count}个语音条目没有合法音频", log_lvl=LogLvl.WARN)
                 text = ""
-                for i in range(min(count, 20)):
-                    text = text + noval_key[i] + "\n"
+                for t in range(min(count, 20)):
+                    text = text + noval_key[t] + "\n"
                 if count > 20:
                     text += "……"
                 f = Messagebox.okcancel(
@@ -737,6 +745,7 @@ class Window(ttk.Frame):
         ttk.Label(log_frame, width=400, font=("Microsoft YaHei", 1), bootstyle=SECONDARY).pack(side=TOP, fill=X)
 
         # progressbar
+        var_progress = ttk.IntVar(self,name="var_progress")
         pb_frame = ttk.Frame(log_frame, padding=(0, 0, 5, 5))
         pb_frame.pack(side=TOP, fill=X)
         pb = ttk.Progressbar(
@@ -746,7 +755,9 @@ class Window(ttk.Frame):
         )
         pb.pack(side=LEFT, fill=X, expand=YES, padx=(15, 10))
         ttk.Label(pb_frame, text='%', bootstyle=SECONDARY).pack(side=RIGHT)
+        # noinspection PyTypeChecker
         ttk.Label(pb_frame, textvariable="var_progress").pack(side=RIGHT)
+        var_progress.set(100)
         self.setvar("var_progress","100")
 
         progress_this = ttk.IntVar(value=0)
@@ -765,6 +776,7 @@ class Window(ttk.Frame):
             else:
                 progress_this.set(progress_this.get()+1)
                 self.setvar("var_progress", f"{(progress_this.get()//progress_length.get())*100}")
+
 
 
         log_count = ttk.IntVar(value=0)
