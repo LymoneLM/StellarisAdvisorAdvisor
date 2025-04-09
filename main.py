@@ -1,8 +1,8 @@
 import os
+import re
 import csv
 import json
 import enum
-import re
 import shutil
 import hashlib
 
@@ -76,6 +76,7 @@ def traverse_and_hash(root_dir=voice_path):
 # scan csv
 def get_default_index():
     global default_index
+    default_index.clear()
     try:
         f = csv.reader(open(os.path.join(default_path, "index.csv"), encoding="utf-8"))
         next(f)
@@ -88,6 +89,7 @@ def get_default_index():
 
 def get_this_index():
     global this_index
+    this_index.clear()
     try:
         f = csv.reader(open("index.csv", encoding="utf-8"))
         next(f)
@@ -153,7 +155,7 @@ def init_info_json(args):
 def load_info_json():
     global info
     try:
-        info = json.load(open("info.json", encoding="utf-8"))
+        info = json.load(open("info.json", 'r', encoding="utf-8"))
         return True
     except Exception as e:
         print(f"Error loading info.json: {str(e)}")
@@ -161,32 +163,30 @@ def load_info_json():
 
 def update_info_json(args):
     global info
-    meta = info.get("meta")
-    meta["object_name"] = args[0]
-    meta["cn_name"] = args[1]
-    meta["en_name"] = args[2]
-    meta["icon_path"] = args[3]
-    info["meta"] = meta
+    info["meta"] ["object_name"] = args[0]
+    info["meta"] ["cn_name"] = args[1]
+    info["meta"] ["en_name"] = args[2]
+    info["meta"] ["icon_path"] = args[3]
     try:
         f = open('info.json', 'w', encoding="utf-8")
-        f.write(json.dumps(info))
+        x =  json.dumps(info)
+        f.write(x)
         return True
     except Exception as e:
         print(f"Error update info.json: {str(e)}")
         return False
 
 # produce
-def from_dirs_produce(move = False):
-    global default_index , work_index
-    work_index.clear()
-    error_set = []
-    noval_key = []
-    work_index= [[0]]* len(default_index)   # no Value Key
-    this_output_path = os.path.join(output_path, obj_hash_name, r"sound\vo", obj_hash_name)
-    if not os.path.exists(this_output_path):
-        os.makedirs(this_output_path)
+def produce_from_dirs(move = False):
     if not get_default_index():
         return False
+    global default_index , work_index
+    error_set = []
+    noval_key = []
+    work_index= [0 for _  in range(len(default_index))]
+    this_output_path = os.path.join(output_path, obj_hash_name, r"sound\vo", obj_hash_name)
+    if move and not os.path.exists(this_output_path):
+        os.makedirs(this_output_path)
     try:
         for entry in os.scandir(voice_path):
             if entry.is_dir() and len(entry.name) >= 2 and entry.name[:2].isdigit():
@@ -197,19 +197,17 @@ def from_dirs_produce(move = False):
                         count += 1
                         if move:
                             new_name = f"{default_index[folder_index][0]}_{count}.wav"
-                            work_index[folder_index].append(new_name)
                             target_path = os.path.join(this_output_path, new_name)
                             shutil.copy2(file.path, target_path)
                     elif not move:
                         error_set.append(f"{file.path}不是.wav音频文件")
-                work_index[folder_index][0] = count
+                work_index[folder_index] = count
             elif not move:
                 error_set.append(f"{entry.path}是预期之外的文件")
-        noval_key.clear()
-        for i in range(len(work_index)):
-            if work_index[i][0] == 0:
-                noval_key.append(default_index[i][1])
-        # print(work_index)
+        if not move:
+            for i in range(len(default_index)):
+                if work_index[i] == 0:
+                    noval_key.append(default_index[i][1])
         return True, error_set, noval_key
 
     except Exception as e:
@@ -217,12 +215,39 @@ def from_dirs_produce(move = False):
         return False, error_set, noval_key
 
 
-def from_csv_produce():
-    print()
-    # TODO:
+def produce_from_csv(move = False):
+    if not get_this_index():
+        return False
+    global default_index , work_index , this_index
+    work_index.clear()
+    error_set = []
+    noval_key = []
+    if not move:
+        if not get_default_index():
+            return False
+        for row in range(len(default_index)):
+            if this_index[row][0] != default_index[row][0]:
+                error_set.append(f"索引文件{row}行与默认索引存在差异")
+        if len(error_set) > 0:
+            error_set.append("索引文件与默认索引存在差异，将按照索引文件处理")
+    work_index = [0 for _ in range(len(default_index))]
+    this_output_path = os.path.join(output_path, obj_hash_name, r"sound\vo", obj_hash_name)
+    if move and not os.path.exists(this_output_path):
+        os.makedirs(this_output_path)
+    try:
+        for row in range(len(default_index)):
+            if len(this_index[row]) > 2:
+                for col in range(2,len(this_index[row])):
+                    if not os.path.exists(os.path.join(voice_path, this_index[row][col])):
+                        if not move:
+                            error_set.append(f"找不到位于索引{row+1}{chr(ord('A')+2)}处名为{row[col]}的音频文件")
+        return True, error_set, noval_key
+    except Exception as e:
+        print(f"Error producing mod from csv: {str(e)}")
+        return False, error_set, noval_key
 
 
-def write_asset():
+def write_asset_from_work_index():
     print()
     # TODO:
 
@@ -263,10 +288,10 @@ class Window(ttk.Frame):
         def about():
             Messagebox.show_info(
                 title="关于",
-                 parent=root,
-                 message=f"{cn_title} {version}\n{en_title}\nby: {_copyright}\n"
-                         + "遵循MIT许可证开源\n"
-                         + "Icons by Icons8.com"
+                parent=root,
+                message=f"{cn_title} {version}\n{en_title}\nby: {_copyright}\n"
+                        + "遵循MIT许可证开源\n"
+                        + "Icons by Icons8.com"
             )
 
         menubar = ttk.Menu(root)
@@ -429,7 +454,7 @@ class Window(ttk.Frame):
         ttk.Label(
             master=lf_init_info,
             text="“使用文件夹”方式，类似于顾问语音mod创建助手，通过不同的文件夹区分不同的语音条目。\n"
-            "“填写表格”方式，会生成一个表格，通过使用文件名填写表格对应语音条目，可以使文件管理更自由。",
+                 "“填写表格”方式，会生成一个表格，通过使用文件名填写表格对应语音条目，可以使文件管理更自由。",
             font=("Microsoft YaHei", 10),
             wraplength = 350
         ).pack(side=TOP, fill=X)
@@ -487,14 +512,14 @@ class Window(ttk.Frame):
         delete_init_button_frame = ttk.Frame(init_button_frame,padding=0)
         delete_init_button_frame.pack(side=LEFT, fill=Y, padx=20, pady=20, expand=True)
         delete_init_button = ttk.Button(delete_init_button_frame, text="删除初始化", bootstyle=DANGER, takefocus=False,
-                                       command=lambda: touch_init(False))
+                                        command=lambda: touch_init(False))
         ToolTip(delete_init_button, text="删除所有初始化产生的文件，使小助手回到最初状态\n（不会删除备份文件和已有输出）")
         delete_init_button.pack(side=BOTTOM, fill=X, expand=True)
 
         _init_button_frame = ttk.Frame(init_button_frame,padding=0)
         _init_button_frame.pack(side=RIGHT, fill=Y, padx=20, pady=20,expand=True)
         init_button =  ttk.Button(_init_button_frame,text="开始初始化",bootstyle=SUCCESS,takefocus=False,
-                                    command=lambda : touch_init(True))
+                                  command=lambda : touch_init(True))
         init_button.pack(side=BOTTOM, fill=X, expand=True)
 
         #page product
@@ -525,63 +550,70 @@ class Window(ttk.Frame):
         ttk.Label(info_table_frame, text="顾问图标文件名(方形.dds图片或者.png图片，留空将使用默认图标)：").pack(side=TOP, fill=X)
         ttk.Entry(info_table_frame, textvariable=var_icon_path).pack(side=TOP, fill=X)
 
-        def touch_product():
-            # basic confirm
-            f = Messagebox.okcancel(
-                parent=root,
-                message="该操作将会开始生成模组，请确认音频文件已经组织完毕",
-                button=["取消:secondary", "确定:primary"],
-            )
-            if f == "取消":
-                append_log("模组生成操作取消")
-                return
-            if not validate_input(var_object_name.get()):
-                Messagebox.show_info(
-                    parent=root,
-                    title="非法输入",
-                    message="内置项目名仅支持大小写英文、数字和下划线\n"
-                            +"内置项目名允许留空，将使用默认项目名SAAProduct"
-                )
-                append_log("内置项目名输入非法，生成操作取消")
-                return
-            if var_object_name.get() == "":
-                append_log("内置项目名留空，将使用默认项目名SAAProduct")
-                var_object_name.set("SAAProduct")
-            if var_cn_name.get() == "":
-                append_log(f"顾问中文名留空,将使用内置项目名{var_object_name.get()}")
-                var_cn_name.set(var_object_name.get())
-            if var_en_name.get() == "":
-                append_log(f"顾问英文名留空，将使用内置项目名{var_object_name.get()}")
-                var_en_name.set(var_object_name.get())
-            if var_icon_path.get() == "":
-                append_log(f"顾问图标文件名留空，将使用默认图标")
-                var_icon_path.set(img_path+r"\favicon.dds")
-            if not os.path.exists(var_icon_path.get()):
-                append_log("顾问图标文件不存在，生成操作取消")
-                Messagebox.show_info(
-                    parent=root,
-                    title="顾问图标文件不存在",
-                    message="无法访问顾问图标文件，请确认路径填写正确\n"
-                            + "顾问图标文件名允许留空，将使用默认图标"
-                )
-                return
-            _,ext = os.path.splitext(var_icon_path.get())
-            is_png = ext == ".png"
-            if is_png:
-                append_log("检测到顾问图标为.png图片，更推荐使用.dds图片，但本次模组生成将继续进行",log_lvl=LogLvl.WARN)
-            elif ext == ".dds":
-                append_log("成功访问到顾问图标文件")
-            else:
-                append_log("顾问图标文件为不支持的格式",log_lvl=LogLvl.WARN)
-                Messagebox.show_info(
-                    parent=root,
-                    title="顾问图标文件不存在",
-                    message="顾问图标文件为不支持的格式\n"
-                            + "请使用方形.dds图片或者.png图片\n"
-                            + "顾问图标文件名允许留空，将使用默认图标"
-                )
-                return
 
+
+        def touch_produce():
+            # basic confirm
+            def check_meta() -> bool:
+                f = Messagebox.okcancel(
+                    parent=root,
+                    message="该操作将会开始生成模组，请确认音频文件已经组织完毕",
+                    button=["取消:secondary", "确定:primary"],
+                )
+                if f == "取消":
+                    append_log("模组生成操作取消")
+                    return False
+                if not validate_input(var_object_name.get()):
+                    Messagebox.show_info(
+                        parent=root,
+                        title="非法输入",
+                        message="内置项目名仅支持大小写英文、数字和下划线\n"
+                                + "内置项目名允许留空，将使用默认项目名SAAProduct"
+                    )
+                    append_log("内置项目名输入非法，生成操作取消")
+                    return False
+                if var_object_name.get() == "":
+                    append_log("内置项目名留空，将使用默认项目名SAAProduct")
+                    var_object_name.set("SAAProduct")
+                if var_cn_name.get() == "":
+                    append_log(f"顾问中文名留空,将使用内置项目名{var_object_name.get()}")
+                    var_cn_name.set(var_object_name.get())
+                if var_en_name.get() == "":
+                    append_log(f"顾问英文名留空，将使用内置项目名{var_object_name.get()}")
+                    var_en_name.set(var_object_name.get())
+                if var_icon_path.get() == "":
+                    append_log(f"顾问图标文件名留空，将使用默认图标")
+                    var_icon_path.set(img_path + r"\favicon.dds")
+                if not os.path.exists(var_icon_path.get()):
+                    append_log("顾问图标文件不存在，生成操作取消")
+                    Messagebox.show_info(
+                        parent=root,
+                        title="顾问图标文件不存在",
+                        message="无法访问顾问图标文件，请确认路径填写正确\n"
+                                + "顾问图标文件名允许留空，将使用默认图标"
+                    )
+                    return False
+                _, ext = os.path.splitext(var_icon_path.get())
+                is_png = ext == ".png"
+                if is_png:
+                    append_log("检测到顾问图标为.png图片，更推荐使用.dds图片，但本次模组生成将继续进行",
+                               log_lvl=LogLvl.WARN)
+                elif ext == ".dds":
+                    append_log("成功访问到顾问图标文件")
+                else:
+                    append_log("顾问图标文件为不支持的格式", log_lvl=LogLvl.WARN)
+                    Messagebox.show_info(
+                        parent=root,
+                        title="顾问图标文件不存在",
+                        message="顾问图标文件为不支持的格式\n"
+                                + "请使用方形.dds图片或者.png图片\n"
+                                + "顾问图标文件名允许留空，将使用默认图标"
+                    )
+                    return False
+                return True
+
+            if not check_meta():
+                return
             # start produce
 
             # get hash
@@ -598,7 +630,6 @@ class Window(ttk.Frame):
                 append_log("info.json更新失败",log_lvl=LogLvl.ERROR)
             append_log("更新info.json")
 
-
             this_output_path = os.path.join(output_path, obj_hash_name)
             if not os.path.exists(output_path):
                 os.makedirs(output_path)
@@ -606,70 +637,77 @@ class Window(ttk.Frame):
                 append_log(fr"输出文件夹{this_output_path}已存在，新模组将清空覆盖")
                 shutil.rmtree(this_output_path ,ignore_errors=True)
 
+            # index
+            def handle_error_set(_set) -> bool:
+                count = len(error_set)
+                append_log(f"索引存在{count}个错误", log_lvl=LogLvl.ERROR)
+                text = ""
+                for i in range(min(count, 20)):
+                    text += text + error_set[i] + "\n"
+                if count > 20:
+                    text += "……"
+                f = Messagebox.okcancel(
+                    parent=root,
+                    title=f"索引存在{count}个错误",
+                    message=text,
+                    button=["取消:secondary", "继续生成:primary"],
+                    alert=True
+                )
+                if f == "取消":
+                    append_log("取消生成模组")
+                    return False
+                return True
 
+            def handle_noval_key(_set) -> bool:
+                count = len(noval_key)
+                if count == len(default_index):
+                    append_log(f"目录中未找到音频，生成任务取消", log_lvl=LogLvl.ERROR)
+                    Messagebox.show_info(
+                        parent=root,
+                        title="无法找到音频，生成任务取消",
+                        message=f"请检查音频文件是否正确放入{voice_path}对应文件夹\n"
+                                + "音频文件必须是.wav音频文件\n"
+                                + "请尝试备份文件后重新初始化小助手"
+                    )
+                    return False
+                append_log(f"存在{count}个语音条目没有合法音频", log_lvl=LogLvl.WARN)
+                text = ""
+                for i in range(min(count, 20)):
+                    text = text + noval_key[i] + "\n"
+                if count > 20:
+                    text += "……"
+                f = Messagebox.okcancel(
+                    parent=root,
+                    title=f"存在{count}个语音条目没有合法音频",
+                    message=text,
+                    button=["取消:secondary", "继续生成:primary"],
+                    alert=True
+                )
+                if f == "取消":
+                    append_log("取消生成模组")
+                    return False
+                return True
+
+            append_log("开始索引文件")
             is_use_dirs = info["internal"]["is_use_dirs"]
             if is_use_dirs:
                 append_log("本次将根据文件夹索引生成模组")
-                append_log("开始索引文件")
-                x,error_set, noval_key= from_dirs_produce()
-                if not x:
-                    append_log("索引出错，请重试",log_lvl=LogLvl.ERROR)
-
-                if len(error_set) != 0:
-                    count = len(error_set)
-                    append_log(f"存在{count}个无效文件", log_lvl=LogLvl.WARN)
-                    text = ""
-                    for i in range(min(count,20)):
-                        text += text + error_set[i] + "\n"
-                    if count > 20:
-                        text += "……"
-                    f = Messagebox.okcancel(
-                        parent=root,
-                        title=f"存在{count}个无效文件",
-                        message=text,
-                        button=["取消:secondary", "继续生成:primary"],
-                        alert=True
-                    )
-                    if f == "取消":
-                        append_log("取消生成模组")
-                        return
-
-                if len(noval_key) != 0:
-                    count = len(noval_key)
-                    if count == len(default_index):
-                        append_log(f"目录中未找到音频，生成任务取消", log_lvl=LogLvl.ERROR)
-                        Messagebox.show_info(
-                            parent=root,
-                            title="无法找到音频，生成任务取消",
-                            message=f"请检查音频文件是否正确放入{voice_path}对应文件夹\n"
-                                    + "音频文件必须是.wav音频文件\n"
-                                    + "请尝试备份文件后重新初始化小助手"
-                        )
-                        return
-                    append_log(f"存在{count}个语音条目没有合法音频", log_lvl=LogLvl.WARN)
-                    text = ""
-                    for i in range(min(count, 20)):
-                        text = text + noval_key[i] + "\n"
-                    if count > 20:
-                        text += "……"
-                    f = Messagebox.okcancel(
-                        parent=root,
-                        title=f"存在{count}个语音条目没有合法音频",
-                        message=text,
-                        button=["取消:secondary", "继续生成:primary"],
-                        alert=True
-                    )
-                    if f == "取消":
-                        append_log("取消生成模组")
-                        return
-                x = from_dirs_produce(True)
-                if not x:
-                    append_log("文件转移出错，请重试", log_lvl=LogLvl.ERROR)
-
+                x, error_set, noval_key= produce_from_dirs()
             else:
                 append_log("本次将根据index.csv索引生成模组")
-                append_log("开始索引文件")
+                x, error_set, noval_key = produce_from_csv()
+            if not x:
+                append_log("索引出错，请重试",log_lvl=LogLvl.ERROR)
+            if len(error_set) != 0 and not handle_error_set(error_set):
+                return
+            if len(noval_key) != 0 and not handle_noval_key(noval_key):
+                return
+            x = produce_from_dirs(move=True) if is_use_dirs else produce_from_csv(move=True)
+            if not x:
+                append_log("文件转移出错，请重试", log_lvl=LogLvl.ERROR)
+            append_log("文件转移完成")
 
+            # write asset
 
 
 
@@ -677,7 +715,7 @@ class Window(ttk.Frame):
         product_button_frame = ttk.Frame(table_page[2],padding=40)
         product_button_frame.pack(side=BOTTOM, fill=X)
         product_button = ttk.Button(product_button_frame,text="生成顾问模组",takefocus=False,
-                                    command=lambda : touch_product())
+                                    command=lambda : touch_produce())
         product_button.pack(side=BOTTOM, fill=X)
 
 
@@ -746,6 +784,8 @@ class Window(ttk.Frame):
             log_count.set(log_count.get() + 1)
             if step:
                 progress_step()
+            # roll frame to bottom
+            cl_frame.yview_moveto(1.0)
 
 
         # cmd-like
@@ -761,8 +801,8 @@ class Window(ttk.Frame):
 
 
 if __name__ == "__main__":
-    get_default_index()
-    print(default_index)
+    # get_default_index()
+    # print(default_index)
 
     root = ttk.Window(
         title=f"{cn_title} {en_title} {version}",
