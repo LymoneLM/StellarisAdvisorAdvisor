@@ -180,6 +180,15 @@ def update_info_json(args):
         print(f"Error update info.json: {str(e)}")
         return False
 
+def copy_default_icon():
+    try:
+        shutil.copy2(os.path.join(img_path, "favicon.dds"),"favicon.dds")
+        return True
+    except Exception as e:
+        print(f"Error copy favicon.dds: {str(e)}")
+        return False
+
+
 # produce
 def produce_from_dirs(move = False):
     if not get_default_index():
@@ -741,7 +750,10 @@ class Window(ttk.Frame):
                     var_en_name.set(var_object_name.get())
                 if var_icon_path.get() == "":
                     append_log(f"顾问图标文件名留空，将使用默认图标")
-                    var_icon_path.set(img_path + r"\favicon.dds")
+                    if not copy_default_icon():
+                        append_log(f"拷贝默认图标文件是出现错误")
+                        return False
+                    var_icon_path.set(r"favicon.dds")
                 if not os.path.exists(var_icon_path.get()):
                     append_log("顾问图标文件不存在，生成操作取消")
                     Messagebox.show_info(
