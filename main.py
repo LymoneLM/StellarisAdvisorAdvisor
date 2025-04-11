@@ -18,7 +18,7 @@ from ttkbootstrap.scrolled import ScrolledFrame
 # meta
 cn_title = "群星顾问模组小助手"
 en_title = "Stellaris Advisor Advisor"
-version = "v0.1.0-beta"
+version = "v0.1.1-beta"
 _copyright = "LymoneLM"
 
 # constant
