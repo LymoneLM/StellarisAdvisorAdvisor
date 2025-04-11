@@ -247,7 +247,7 @@ def produce_from_csv(move = False):
                     text += f" {i+1}"
             if len(error_set) > 0:
                 error_set.append(f"索引文件{text} 行Key值与默认索引存在差异，将按照索引文件处理")
-        if len(error_set) > 0:  # this index not as same as default one at all
+        if len(error_set) > 0:  # this index not as same as default one
             pattern = r'^[A-Za-z0-9_]+$'
             for i in range(len(this_index)):
                 if not re.match(pattern, str(this_index[i][0])):
@@ -261,15 +261,18 @@ def produce_from_csv(move = False):
         for i in range(len(this_index)):
             if len(this_index[i]) > 2:
                 count = 0
-                if not move:
+                if move:
+                    # temp fix for custom csv index write asset
                     default_index[i][0] = this_index[i][0]
                 for col in range(2,len(this_index[i])):
+                    if this_index[i][col] == "":
+                        continue
                     file_path = os.path.join(voice_path, this_index[i][col])
                     if not file_path.lower().endswith('.wav'):
                         file_path += '.wav'
                     if not os.path.exists(file_path):
                         if not move:
-                            error_set.append(f"找不到位于索引{i+1}{chr(ord('A')+col)}处名为{this_index[i][col]}的音频文件")
+                            error_set.append(f"找不到位于索引{i+2}{chr(ord('A')+col)}处名为{this_index[i][col]}的音频文件")
                     else:
                         count += 1
                         if move:
@@ -448,7 +451,8 @@ class Window(ttk.Frame):
 
         menubar = ttk.Menu(root)
         feedback = ttk.Menu(menubar, tearoff=False)
-        # feedback.add_command(label="Steam社区", )
+        url_steam = "https://steamcommunity.com/sharedfiles/filedetails/?id=3461135342"
+        feedback.add_command(label="Steam社区", command=lambda: webbrowser.open(url_steam))
         # noinspection SpellCheckingInspection
         url_qq_group = ("http://qm.qq.com/cgi-bin/qm/qr?_wv=1027&k=JjKgF6Qshvuuuze9JiaCm6xPVCKaHNLT&"
                         "authKey=pe64fotfEHDgrDbBPk9M9sG5oAaMqp4n%2F%2FCLBvOf7yJOn8r5i3MGZGdLHdYdlnuG&"
@@ -820,8 +824,8 @@ class Window(ttk.Frame):
                 f = Messagebox.okcancel(
                     parent=root,
                     title=f"索引存在{count}个错误",
-                    message=text,
-                    button=["取消:secondary", "继续生成:primary"],
+                    message=text+"\n点击确定将无视错误继续生成",
+                    button=["取消:secondary", "确定:primary"],
                     alert=True
                 )
                 if f == "取消":
@@ -850,8 +854,8 @@ class Window(ttk.Frame):
                 f = Messagebox.okcancel(
                     parent=root,
                     title=f"存在{count}个语音条目没有合法音频",
-                    message=text,
-                    button=["取消:secondary", "继续生成:primary"],
+                    message=text+"\n点击确定将无视错误继续生成",
+                    button=["取消:secondary", "确定:primary"],
                     alert=True
                 )
                 if f == "取消":
@@ -877,7 +881,7 @@ class Window(ttk.Frame):
                     return
             if not x:
                 append_log("索引出错，请重试",log_lvl=LogLvl.ERROR)
-            progress_step()
+            append_log("文件索引完成",step=True)
             if len(error_set) != 0 and not handle_error_set(error_set):
                 return
             if len(noval_key) != 0 and not handle_noval_key(noval_key):

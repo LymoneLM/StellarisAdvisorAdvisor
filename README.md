@@ -58,6 +58,8 @@ A Python-based open-ended GUI interactive tool for creating Stellaris advisor vo
 - 如果引入生成式大语言模型API（例如DeepSeek），可能只需要开发一套引导词汇（听起来不错
 - [ ] TTS自动生成语音
 - 例如引入GPT-SoVITS，实现对其的批量调用，如何
+- [ ] 使用PyQt重置UI
+- 这是长期计划，出于学习的目的
 
 ## 注意 Attention
 
