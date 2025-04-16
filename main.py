@@ -155,7 +155,7 @@ def init_info_json(args):
         return False
 
 
-def load_info_json():
+def get_info_json():
     global info
     try:
         with open('info.json', 'r', encoding="utf-8") as f:
@@ -407,6 +407,27 @@ def write_others():
         return False
 
 
+def write_descriptor_mod ():
+    global info
+    if not get_info_json():
+        return False
+    path = os.path.join(output_path, obj_hash_name, "descriptor.mod")
+    try:
+        with open(path, "w") as f:
+            f.write("version=\"1.0\"\n")
+            f.write("tags={\n\t\"Sound\"\n}\n")
+            mod_cn_name = info["meta"]["cn_name"]
+            mod_en_name = info["meta"]["en_name"]
+            f.write(f"name=\"{mod_cn_name} | {mod_en_name}\"\n")
+            f.write(f"picture=\"thumbnail.jpg\"\n")
+            f.write("supported_version=\"*\"\n")
+            f.write("remote_file_id=\"\"")
+        return True
+    except Exception as e:
+        print(f"Error writing descriptor.mod: {str(e)}")
+        return False
+
+
 # ui
 # noinspection PyArgumentList
 class Window(ttk.Frame):
@@ -506,7 +527,7 @@ class Window(ttk.Frame):
             # page produce
             if button_no == 2 and var_object_name.get() == "":
                 if os.path.exists("info.json"):
-                    load_info_json()
+                    get_info_json()
                     var_object_name.set(info["meta"]["object_name"] if info["meta"]["object_name"] else "")
                     var_cn_name.set(info["meta"]["cn_name"] if info["meta"]["cn_name"] else "")
                     var_en_name.set(info["meta"]["en_name"] if info["meta"]["en_name"] else "")
@@ -904,6 +925,13 @@ class Window(ttk.Frame):
                 append_log("生成其他配置文件时出错，请重试",log_lvl=LogLvl.ERROR)
                 return
             append_log("生成其他配置文件",step=True)
+
+            # write descriptor.mod
+            if info["internal"]["need_descriptor_mod"]:
+                if not write_descriptor_mod():
+                    append_log("生成descriptor.mod失败，请重试",log_lvl=LogLvl.ERROR)
+                    return
+                append_log("生成descriptor.mod",step=True)
 
             # produce done
             append_log(f"模组生成完成，位于{output_path}\\{obj_hash_name}",log_lvl=LogLvl.SUCCESS)
